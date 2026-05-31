@@ -185,6 +185,7 @@ button,
   padding: 12px 24px 24px;
   padding-top: calc(12px + env(safe-area-inset-top, 0px));
   padding-bottom: calc(24px + env(safe-area-inset-bottom, 0px));
+  flex-shrink: 0;
 }
 
 /* ── SCREEN 1: HOME SCREEN ── */

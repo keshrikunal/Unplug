@@ -39,7 +39,14 @@ const REFLECTIONS = {
 
 // ── INITIAL STATE CONFIGURATION ──
 const TODAY = new Date().toDateString();
-let db = JSON.parse(localStorage.getItem('minPhoneData') || '{}');
+let db = {};
+try {
+  db = JSON.parse(localStorage.getItem('minPhoneData') || '{}') || {};
+} catch (e) {
+  console.error("Corrupted local storage database detected, resetting:", e);
+  localStorage.removeItem('minPhoneData');
+  db = {};
+}
 
 function initializeDatabase() {
   const defaultDb = {
