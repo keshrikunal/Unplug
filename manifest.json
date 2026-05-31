@@ -8,6 +8,12 @@
   "orientation": "portrait",
   "background_color": "#0e0e0e",
   "theme_color": "#0e0e0e",
+  "categories": [
+    "utilities",
+    "productivity",
+    "lifestyle"
+  ],
+  "prefer_related_applications": false,
   "icons": [
     {
       "src": "./icon-192.png",
