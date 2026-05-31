@@ -104,6 +104,7 @@ html, body {
   }
   
   .phone-notch {
+    display: block;
     position: absolute;
     top: 0;
     left: 50%;
@@ -115,11 +116,19 @@ html, body {
     border-bottom-right-radius: 18px;
     z-index: 10;
   }
+  
+  .phone-status-bar {
+    display: flex;
+  }
+  
+  .phone-home-bar {
+    display: block;
+  }
 }
 
 /* ── PHONE STATUS BAR ── */
 .phone-status-bar {
-  display: flex;
+  display: none;
   justify-content: space-between;
   align-items: center;
   padding: 14px 24px 6px;
@@ -165,6 +174,8 @@ html, body {
   flex-direction: column;
   overflow: hidden;
   padding: 12px 24px 24px;
+  padding-top: calc(12px + env(safe-area-inset-top, 0px));
+  padding-bottom: calc(24px + env(safe-area-inset-bottom, 0px));
 }
 
 /* ── SCREEN 1: HOME SCREEN ── */
@@ -1516,6 +1527,7 @@ html, body {
 
 /* ── PHONE HOME BOTTOM INDICATOR BAR ── */
 .phone-home-bar {
+  display: none;
   position: absolute;
   bottom: 8px;
   left: 50%;
