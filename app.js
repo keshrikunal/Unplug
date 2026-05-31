@@ -70,16 +70,20 @@ const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', '
 // ── CORE DATA ACCESSORS ──
 function loadDatabase() {
   try {
-    db = JSON.parse(localStorage.getItem('minPhoneData') || '{}') || {};
+    const data = localStorage.getItem('minPhoneData');
+    db = JSON.parse(data || '{}') || {};
   } catch (e) {
-    console.error("Corrupted local storage database, resetting:", e);
-    localStorage.removeItem('minPhoneData');
+    console.error("Failed to load local storage database:", e);
     db = {};
   }
 }
 
 function saveDb() {
-  localStorage.setItem('minPhoneData', JSON.stringify(db));
+  try {
+    localStorage.setItem('minPhoneData', JSON.stringify(db));
+  } catch (e) {
+    console.warn("Storage writing blocked or failed:", e);
+  }
 }
 
 function calculateHabitsPercent(data) {
@@ -940,7 +944,7 @@ function checkBedtimeLock() {
     if (warningCard) warningCard.classList.add('hidden');
     if (lockOverlay) lockOverlay.classList.remove('open');
     curfewBypassed = false;
-    curozeUntil = 0;
+    curfewSnoozeUntil = 0;
   }
 }
 
@@ -1233,5 +1237,9 @@ function init() {
   }
 }
 
-// Kick off system init when DOM is loaded
-window.addEventListener('DOMContentLoaded', init);
+// Kick off system init checking readyState for WebView and PWA compliance
+if (document.readyState === 'loading') {
+  window.addEventListener('DOMContentLoaded', init);
+} else {
+  init();
+}
