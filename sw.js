@@ -1,4 +1,4 @@
-const CACHE_NAME = 'unplug-cache-v3';
+const CACHE_NAME = 'unplug-cache-v4';
 const ASSETS = [
   './index.html',
   './styles.css',
@@ -8,7 +8,8 @@ const ASSETS = [
   './icon-192.png',
   './icon-512.png',
   './screenshot-mobile-1.png',
-  './screenshot-mobile-2.png'
+  './screenshot-mobile-2.png',
+  './screenshot-desktop.png'
 ];
 
 self.addEventListener('install', (e) => {

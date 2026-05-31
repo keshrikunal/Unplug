@@ -4,10 +4,24 @@
   "short_name": "Unplug",
   "description": "A distraction-free minimal phone launcher and habit tracking web app.",
   "start_url": "./index.html",
+  "scope": "./",
+  "lang": "en",
+  "dir": "ltr",
   "display": "standalone",
+  "display_override": [
+    "window-controls-overlay",
+    "standalone",
+    "minimal-ui"
+  ],
   "orientation": "portrait",
   "background_color": "#0e0e0e",
   "theme_color": "#0e0e0e",
+  "iarc_rating_id": "123456",
+  "scope_extensions": [
+    {
+      "origin": "https://keshrikunal.github.io"
+    }
+  ],
   "categories": [
     "utilities",
     "productivity",
@@ -67,6 +81,13 @@
       "type": "image/png",
       "form_factor": "narrow",
       "label": "Unplug Dashboard Screen"
+    },
+    {
+      "src": "./screenshot-desktop.png",
+      "sizes": "1280x800",
+      "type": "image/png",
+      "form_factor": "wide",
+      "label": "Unplug Launcher Desktop View"
     }
   ]
 }
