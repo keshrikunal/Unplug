@@ -1,0 +1,468 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <title>Unplug</title>
+  <!-- Load Premium Fonts: DM Serif Display, Outfit, JetBrains Mono -->
+  <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=Outfit:wght@300;400;500;600&family=JetBrains+Mono:wght@300;400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="./styles.css">
+  <link rel="manifest" href="./manifest.json">
+</head>
+<body>
+
+  <!-- Mock Phone Chassis for Desktop View -->
+  <div class="phone-frame">
+    <div class="phone-notch"></div>
+    <div class="phone-status-bar">
+      <span class="status-time" id="status-time">12:00</span>
+      <div class="status-icons">
+        <svg viewBox="0 0 24 24" class="status-icon"><path d="M12 3c-4.97 0-9 4.03-9 9 0 2.12.74 4.07 1.97 5.61L4.35 19.4c-.39.39-.39 1.02 0 1.41.39.39 1.02.39 1.41 0l1.9-1.9C9.07 19.58 10.48 20 12 20c4.97 0 9-4.03 9-9s-4.03-9-9-9zm0 15c-3.31 0-6-2.69-6-6s2.69-6 6-6 6 2.69 6 6-2.69 6-6 6z"/></svg>
+        <svg viewBox="0 0 24 24" class="status-icon"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z"/></svg>
+        <span class="status-battery" id="status-battery">88%</span>
+      </div>
+    </div>
+
+    <!-- Main Viewport Container -->
+    <div class="viewport">
+      <div class="viewport-wrapper" id="viewport-wrapper">
+        
+        <!-- ══════════════ SCREEN 1: LAUNCHER (HOME) ══════════════ -->
+        <div class="screen" id="screen-home">
+          <div class="launcher-header">
+            <div class="clock-container">
+              <div class="clock" id="home-clock">00:00</div>
+              <div class="date" id="home-date">Monday, Jan 01</div>
+            </div>
+            
+            <!-- Curated Daily Quotes -->
+            <div class="quote-card" id="quote-container" title="Double tap to cycle quotes">
+              <p class="quote-text" id="quote-text">"Quiet the mind, and the soul will speak."</p>
+              <span class="quote-author" id="quote-author">Zen Maxim</span>
+            </div>
+          </div>
+
+          <!-- Basic Minimal Analytics Row -->
+          <div class="stats-overview">
+            <div class="overview-pill" onclick="navigateTo(1)">
+              <span class="pill-value" id="home-opens">0</span>
+              <span class="pill-label">Opens</span>
+            </div>
+            <div class="overview-pill" onclick="navigateTo(1)">
+              <span class="pill-value" id="home-screentime">0m</span>
+              <span class="pill-label">Screen</span>
+            </div>
+            <div class="overview-pill" onclick="navigateTo(1)">
+              <span class="pill-value" id="home-streak">0</span>
+              <span class="pill-label">Streak</span>
+            </div>
+          </div>
+
+          <!-- Primary Actions -->
+          <div class="launcher-actions">
+            <button class="launcher-btn" id="btn-dialer-trigger">
+              <div class="btn-icon icon-call">
+                <svg viewBox="0 0 24 24"><path d="M20.01 15.38c-1.23 0-2.42-.2-3.53-.56a.977.977 0 0 0-1.01.24l-2.2 2.2a15.045 15.045 0 0 1-6.59-6.59l2.2-2.21c.28-.26.36-.65.25-1C8.7 6.45 8.5 5.25 8.5 4c0-.55-.45-1-1-1H4c-.55 0-1 .45-1 1 0 9.39 7.61 17 17 17 .55 0 1-.45 1-1v-3.58c0-.57-.45-1.04-1-1.04z"/></svg>
+              </div>
+              <div class="btn-info">
+                <span class="btn-title">Phone Call</span>
+                <span class="btn-subtitle">Dial contacts</span>
+              </div>
+            </button>
+
+            <button class="launcher-btn" id="btn-whatsapp-trigger">
+              <div class="btn-icon icon-whatsapp">
+                <svg viewBox="0 0 24 24"><path d="M12.04 2c-5.46 0-9.91 4.45-9.91 9.91 0 1.75.46 3.45 1.32 4.95L2.05 22l5.25-1.38c1.45.79 3.08 1.21 4.74 1.21 5.46 0 9.91-4.45 9.91-9.91 0-2.65-1.03-5.14-2.9-7.01A9.816 9.816 0 0 0 12.04 2zm0 18.17c-1.48 0-2.93-.4-4.2-1.15l-.3-.18-3.12.82.83-3.04-.2-.31a8.19 8.19 0 0 1-1.26-4.38c0-4.51 3.67-8.18 8.18-8.18 2.19 0 4.24.85 5.79 2.4 1.55 1.55 2.4 3.6 2.4 5.79 0 4.52-3.67 8.19-8.18 8.19z"/></svg>
+              </div>
+              <div class="btn-info">
+                <span class="btn-title">WhatsApp</span>
+                <span class="btn-subtitle">Direct message</span>
+              </div>
+            </button>
+          </div>
+
+          <!-- Bottom Navigation Swipe Bar -->
+          <div class="launcher-footer" onclick="navigateTo(1)">
+            <span class="footer-prompt">Swipe or tap for Unplug Dashboard</span>
+            <div class="footer-arrow">
+              <svg viewBox="0 0 24 24"><path d="M8.59 16.59L13.17 12 8.59 7.41 10 6l6 6-6 6-1.41-1.41z"/></svg>
+            </div>
+          </div>
+        </div>
+
+        <!-- ══════════════ SCREEN 2: MINDFULNESS & TRACKING ══════════════ -->
+        <div class="screen" id="screen-dashboard">
+          <div class="dashboard-header">
+            <button class="icon-btn-round" onclick="navigateTo(0)" title="Back to Launcher">
+              <svg viewBox="0 0 24 24"><path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"/></svg>
+            </button>
+            <h1 class="dashboard-title">Unplug</h1>
+            <button class="icon-btn-round" id="btn-settings-trigger" title="Settings">
+              <svg viewBox="0 0 24 24"><path d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58c.18-.14.23-.41.12-.61l-1.92-3.32c-.12-.22-.37-.29-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54c-.04-.24-.24-.41-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.09.63-.09.94s.02.64.07.94l-2.03 1.58c-.18.14-.23.41-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z"/></svg>
+            </button>
+          </div>
+
+          <div class="dashboard-scrollable">
+            <!-- Bedtime Curfew Card (Dynamic Warning) -->
+            <div class="dashboard-card card-alert hidden" id="card-bedtime-warning">
+              <div class="card-alert-header">
+                <svg viewBox="0 0 24 24" class="alert-icon"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z"/></svg>
+                <span>Bedtime Curfew Active</span>
+              </div>
+              <p>It's past your digital bedtime. Put down your phone to protect your sleep.</p>
+              <button class="alert-btn" id="btn-lock-curfew">Lock Device Screen</button>
+            </div>
+
+            <!-- Feelings Monitoring Widget -->
+            <div class="dashboard-card">
+              <h2 class="card-title">How is your mind?</h2>
+              <p class="card-desc">Check in with your feelings to break impulse scrolling.</p>
+              <div class="feelings-grid">
+                <button class="feeling-pill" data-feeling="calm">
+                  <span class="feel-emoji">🍃</span><span class="feel-text">Calm</span>
+                </button>
+                <button class="feeling-pill" data-feeling="bored">
+                  <span class="feel-emoji">🥱</span><span class="feel-text">Bored</span>
+                </button>
+                <button class="feeling-pill" data-feeling="restless">
+                  <span class="feel-emoji">⚡</span><span class="feel-text">Restless</span>
+                </button>
+                <button class="feeling-pill" data-feeling="anxious">
+                  <span class="feel-emoji">🌀</span><span class="feel-text">Anxious</span>
+                </button>
+                <button class="feeling-pill" data-feeling="tired">
+                  <span class="feel-emoji">🛌</span><span class="feel-text">Tired</span>
+                </button>
+              </div>
+              <div class="feelings-reflection hidden" id="reflection-box">
+                <div class="reflection-handle"></div>
+                <p class="reflection-quote" id="reflection-text">"You are stronger than a notification."</p>
+                <span class="reflection-author">— Zen Practice</span>
+              </div>
+            </div>
+
+            <!-- Focus Timer Widget -->
+            <div class="dashboard-card text-center">
+              <h2 class="card-title">Focus Timer</h2>
+              <div class="timer-widget">
+                <svg class="progress-ring" width="180" height="180">
+                  <circle class="progress-ring-circle-bg" stroke="#1d1d1b" stroke-width="6" fill="transparent" r="76" cx="90" cy="90"/>
+                  <circle class="progress-ring-circle" id="timer-progress" stroke="var(--accent)" stroke-width="6" fill="transparent" r="76" cx="90" cy="90"/>
+                </svg>
+                <div class="timer-clock-text">
+                  <span class="timer-time" id="dashboard-timer-clock">25:00</span>
+                  <span class="timer-label" id="dashboard-timer-label">Stay focused</span>
+                </div>
+              </div>
+              <div class="timer-presets-row">
+                <button class="preset-btn" onclick="setupTimer(10)">10m</button>
+                <button class="preset-btn active" onclick="setupTimer(25)">25m</button>
+                <button class="preset-btn" onclick="setupTimer(45)">45m</button>
+              </div>
+              <div class="timer-controls-row">
+                <button class="timer-ctrl-btn secondary" id="btn-timer-reset">Reset</button>
+                <button class="timer-ctrl-btn primary" id="btn-timer-toggle">Start</button>
+              </div>
+            </div>
+
+            <!-- Water Intake Tracker -->
+            <div class="dashboard-card">
+              <h2 class="card-title">Water Intake</h2>
+              <div class="water-widget">
+                <div class="water-glass">
+                  <div class="water-fill" id="water-fill-level"></div>
+                  <span class="water-glass-text" id="water-glass-text">0 / 8</span>
+                </div>
+                <div class="water-controls">
+                  <button class="water-btn minus" id="btn-water-minus" title="Subtract Cup">−</button>
+                  <div class="water-stats">
+                    <span class="water-value" id="water-count">0</span>
+                    <span class="water-label">Cups Today</span>
+                  </div>
+                  <button class="water-btn plus" id="btn-water-plus" title="Add Cup">+</button>
+                </div>
+              </div>
+            </div>
+
+            <!-- Essential Habits & Focus Checklist -->
+            <div class="dashboard-card">
+              <h2 class="card-title">Daily Checklist</h2>
+              <p class="card-desc">Crucial actions for a screen-free, healthy day.</p>
+              
+              <div class="checklist" id="habits-checklist">
+                <label class="checklist-item">
+                  <input type="checkbox" id="habit-walk" class="hidden-checkbox">
+                  <span class="custom-checkbox"></span>
+                  <span class="checklist-text">🏃 Physical Walk / Gym</span>
+                </label>
+                <label class="checklist-item">
+                  <input type="checkbox" id="habit-meditate" class="hidden-checkbox">
+                  <span class="custom-checkbox"></span>
+                  <span class="checklist-text">🧘 Mindful Breathing</span>
+                </label>
+                <label class="checklist-item">
+                  <input type="checkbox" id="habit-screenbed" class="hidden-checkbox">
+                  <span class="custom-checkbox"></span>
+                  <span class="checklist-text">📵 No Phone in Bed</span>
+                </label>
+              </div>
+
+              <div class="divider"></div>
+
+              <h3 class="card-subtitle">Today's Focus Tasks</h3>
+              <p class="card-desc">Limit yourself to max 3 key items for the day.</p>
+              
+              <div class="checklist" id="custom-tasks-list">
+                <!-- Injected via JavaScript -->
+              </div>
+              
+              <form class="add-task-form" id="form-add-task">
+                <input type="text" placeholder="Add task (e.g. read book)" id="input-task-name" maxlength="30" required>
+                <button type="submit" class="btn-add">+</button>
+              </form>
+            </div>
+
+            <!-- Usage & Mood Analysis Dashboard -->
+            <div class="dashboard-card">
+              <h2 class="card-title">Today's Analysis</h2>
+              <div class="analytics-row">
+                <div class="analytic-circle-widget">
+                  <svg width="80" height="80">
+                    <circle stroke="#1d1d1b" stroke-width="4" fill="transparent" r="32" cx="40" cy="40"/>
+                    <circle id="habit-score-circle" stroke="var(--accent)" stroke-width="4" fill="transparent" r="32" cx="40" cy="40" stroke-dasharray="201" stroke-dashoffset="201"/>
+                  </svg>
+                  <div class="circle-label-center" id="habit-score-text">0%</div>
+                  <span class="circle-widget-label">Habits Done</span>
+                </div>
+
+                <div class="analytic-value-widget">
+                  <span class="large-val" id="analytics-time-avg">0m</span>
+                  <span class="circle-widget-label">Avg Session</span>
+                </div>
+              </div>
+
+              <!-- Feelings Log Timeline -->
+              <h3 class="card-subtitle" style="margin-top:16px;">Mood Timeline</h3>
+              <div class="mood-timeline" id="mood-timeline-bar">
+                <span class="timeline-empty">No mood data logged today.</span>
+              </div>
+              <div class="mood-legend">
+                <span>🍃 Calm</span>
+                <span>🥱 Bored</span>
+                <span>⚡ Restless</span>
+                <span>🌀 Anxious</span>
+                <span>🛌 Tired</span>
+              </div>
+
+              <!-- Screen Opens / Screen Time comparison chart -->
+              <h3 class="card-subtitle" style="margin-top:16px;">Weekly Detox Log</h3>
+              <div class="chart-container" id="usage-chart-box">
+                <!-- Custom SVG Graph injected here -->
+              </div>
+            </div>
+
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <div class="phone-home-bar" onclick="navigateTo(0)"></div>
+  </div>
+
+  <!-- ══════════════ OVERLAYS & MODALS ══════════════ -->
+
+  <!-- Dialer Overlay Modal -->
+  <div class="overlay" id="overlay-dialer">
+    <div class="modal-box dialer-box">
+      <div class="modal-header">
+        <button class="icon-btn-round" id="btn-dialer-close" title="Close">
+          <svg viewBox="0 0 24 24"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+        <span class="modal-title">Phone Call</span>
+        <button class="icon-btn-round" id="btn-toggle-contacts" title="Toggle Contacts List">
+          <svg viewBox="0 0 24 24"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg>
+        </button>
+      </div>
+
+      <div class="dialer-screen">
+        <div class="dial-number placeholder" id="dial-display">Enter number to call</div>
+      </div>
+
+      <!-- Dialer View -->
+      <div class="dialer-pad" id="dialer-numeric-pad">
+        <div class="keypad-grid">
+          <button class="dial-key" data-val="1"><span class="key-main">1</span><span class="key-sub">&nbsp;</span></button>
+          <button class="dial-key" data-val="2"><span class="key-main">2</span><span class="key-sub">abc</span></button>
+          <button class="dial-key" data-val="3"><span class="key-main">3</span><span class="key-sub">def</span></button>
+          <button class="dial-key" data-val="4"><span class="key-main">4</span><span class="key-sub">ghi</span></button>
+          <button class="dial-key" data-val="5"><span class="key-main">5</span><span class="key-sub">jkl</span></button>
+          <button class="dial-key" data-val="6"><span class="key-main">6</span><span class="key-sub">mno</span></button>
+          <button class="dial-key" data-val="7"><span class="key-main">7</span><span class="key-sub">pqrs</span></button>
+          <button class="dial-key" data-val="8"><span class="key-main">8</span><span class="key-sub">tuv</span></button>
+          <button class="dial-key" data-val="9"><span class="key-main">9</span><span class="key-sub">wxyz</span></button>
+          <button class="dial-key" data-val="*"><span class="key-main">*</span><span class="key-sub">&nbsp;</span></button>
+          <button class="dial-key" data-val="0"><span class="key-main">0</span><span class="key-sub">+</span></button>
+          <button class="dial-key" data-val="#"><span class="key-main">#</span><span class="key-sub">&nbsp;</span></button>
+          <button class="dial-key del-key" id="btn-dial-del"><span class="key-main">⌫</span></button>
+          <button class="dial-key call-key" id="btn-dial-call"><span class="key-main">📞</span></button>
+          <button class="dial-key plus-key" data-val="+"><span class="key-main">+</span><span class="key-sub">intl</span></button>
+        </div>
+      </div>
+
+      <!-- Contacts List Drawer View -->
+      <div class="contacts-drawer hidden" id="contacts-drawer">
+        <form class="add-contact-form" id="form-add-contact">
+          <input type="text" placeholder="Name" id="input-contact-name" required>
+          <input type="tel" placeholder="Phone" id="input-contact-phone" required>
+          <button type="submit">Add</button>
+        </form>
+        <div class="contacts-list" id="contacts-list-container">
+          <!-- Injected via JavaScript -->
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- WhatsApp Quick Message Modal -->
+  <div class="overlay" id="overlay-whatsapp">
+    <div class="modal-box p-24">
+      <div class="modal-header">
+        <span class="modal-title">WhatsApp Contact</span>
+        <button class="icon-btn-round" id="btn-whatsapp-close" title="Close">
+          <svg viewBox="0 0 24 24"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </div>
+      <p style="font-size: 13px; color: var(--muted); margin-bottom: 16px;">Open WhatsApp chat with any phone number without saving it first.</p>
+      <form id="form-whatsapp-chat">
+        <div style="display: flex; gap: 8px;">
+          <input type="tel" placeholder="Number (e.g. +91987654321)" id="input-whatsapp-phone" style="flex:1;" required>
+          <button type="submit" class="ctrl-btn primary" style="padding: 12px 20px;">Chat</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Simulated Phone Call Overlay -->
+  <div class="overlay" id="overlay-active-call">
+    <div class="active-call-box">
+      <div class="call-avatar">👤</div>
+      <h2 class="call-name" id="active-call-name">Unknown</h2>
+      <span class="call-status" id="active-call-status">Dialing...</span>
+      <span class="call-timer" id="active-call-timer">00:00</span>
+      <button class="call-hangup" id="btn-hangup">
+        <svg viewBox="0 0 24 24"><path d="M12 21c-4.97 0-9-4.03-9-9 0-2.12.74-4.07 1.97-5.61L4.35 4.9C3.06 6.78 2.25 9.24 2.25 12c0 5.39 4.36 9.75 9.75 9.75.55 0 1-.45 1-1zm6.03-3.61c.39-.39.39-1.02 0-1.41l-1.9-1.9c-.39-.39-1.02-.39-1.41 0l-1.58 1.58c-1.39-.75-2.58-1.94-3.33-3.33l1.58-1.58c.39-.39.39-1.02 0-1.41l-1.9-1.9c-.39-.39-1.02-.39-1.41 0L6.03 9.47c-1.41 1.41-1.41 3.7-.01 5.12 2.76 2.76 6.34 4.3 10.42 4.3h.01c.58 0 1.15-.05 1.71-.15l-.13-.13z"/></svg>
+      </button>
+    </div>
+  </div>
+
+  <!-- Settings Configuration Modal -->
+  <div class="overlay" id="overlay-settings">
+    <div class="modal-box p-24 scroll-y max-h-80">
+      <div class="modal-header">
+        <span class="modal-title">Settings</span>
+        <button class="icon-btn-round" id="btn-settings-close" title="Close">
+          <svg viewBox="0 0 24 24"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </div>
+
+      <!-- Theme Selector -->
+      <div class="settings-section">
+        <label class="settings-section-title">Color Theme</label>
+        <div class="theme-grid">
+          <button class="theme-btn select-theme-btn active" data-theme="theme-obsidian">
+            <span class="theme-color-preview" style="background:#0a0a0a; border: 1px solid #333;"></span>
+            Obsidian
+          </button>
+          <button class="theme-btn select-theme-btn" data-theme="theme-sage">
+            <span class="theme-color-preview" style="background:#131d16; border: 1px solid #2b3b30;"></span>
+            Forest Sage
+          </button>
+          <button class="theme-btn select-theme-btn" data-theme="theme-clay">
+            <span class="theme-color-preview" style="background:#1d1512; border: 1px solid #3d2a23;"></span>
+            Rust Clay
+          </button>
+          <button class="theme-btn select-theme-btn" data-theme="theme-sand">
+            <span class="theme-color-preview" style="background:#f4f0e6; border: 1px solid #dcd7c9;"></span>
+            Desert Sand
+          </button>
+        </div>
+      </div>
+
+      <!-- Target Settings -->
+      <div class="settings-section">
+        <label class="settings-section-title">Daily Goals</label>
+        <div class="input-group">
+          <label for="setting-water-target">Water Target (cups):</label>
+          <input type="number" id="setting-water-target" min="4" max="15" value="8">
+        </div>
+        <div class="input-group">
+          <label for="setting-bedtime">Sleep Curfew Bedtime:</label>
+          <input type="time" id="setting-bedtime" value="21:30">
+        </div>
+      </div>
+
+      <!-- General Settings -->
+      <div class="settings-section">
+        <label class="settings-section-title">Detox Options</label>
+        <label class="checkbox-setting">
+          <input type="checkbox" id="setting-haptics" checked>
+          <span>Enable Touch Haptic Effects</span>
+        </label>
+        <label class="checkbox-setting">
+          <input type="checkbox" id="setting-sound">
+          <span>Enable Clock Alerts / Ringing</span>
+        </label>
+      </div>
+
+      <!-- Setup Checklist Instructions -->
+      <div class="settings-section">
+        <label class="settings-section-title">Onboarding Instructions</label>
+        <div class="onboarding-guide">
+          <label class="guide-item">
+            <input type="checkbox" id="guide-pwa">
+            <span class="guide-text">Add to Home Screen (Mobile Chrome & Safari)</span>
+          </label>
+          <label class="guide-item">
+            <input type="checkbox" id="guide-distractions">
+            <span class="guide-text">Move distracting apps to 2nd / 3rd screen page</span>
+          </label>
+          <label class="guide-item">
+            <input type="checkbox" id="guide-grayscale">
+            <span class="guide-text">Enable system-wide Grayscale in settings</span>
+          </label>
+        </div>
+      </div>
+
+      <!-- Dangerous resets -->
+      <div class="divider" style="margin: 20px 0;"></div>
+      <button class="danger-btn" id="btn-reset-storage" style="width: 100%;">Erase All Data</button>
+    </div>
+  </div>
+
+  <!-- Bedtime Curfew Digital Curfew Fullscreen Overlay -->
+  <div class="curfew-overlay" id="overlay-curfew-lock">
+    <div class="curfew-content">
+      <span class="curfew-icon">🌙</span>
+      <h1 class="curfew-title">Bedtime Curfew</h1>
+      <p class="curfew-message">It is past your curfew. Give your eyes a rest, put down the phone, and get some deep sleep.</p>
+      <button class="close-curfew-btn" id="btn-bypass-curfew">Lock Screen Bypass (Emergency Only)</button>
+    </div>
+  </div>
+
+  <script src="./app.js"></script>
+  <script>
+    // Register Service Worker
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('./sw.js')
+          .then(reg => console.log('ServiceWorker registered successfully.', reg.scope))
+          .catch(err => console.log('ServiceWorker registration failed:', err));
+      });
+    }
+  </script>
+</body>
+</html>
