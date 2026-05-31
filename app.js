@@ -62,8 +62,14 @@ function initializeDatabase() {
     theme: "theme-obsidian"
   };
 
-  // Merge default values to preserve existing user data on update
+  // Merge default values to preserve existing user data on update (deep default check)
   db = { ...defaultDb, ...db };
+  db.habitsChecked = { ...defaultDb.habitsChecked, ...db.habitsChecked };
+  db.guideCheckboxes = { ...defaultDb.guideCheckboxes, ...db.guideCheckboxes };
+  db.customTasks = db.customTasks || [];
+  db.feelingsLogs = db.feelingsLogs || [];
+  db.history = db.history || [];
+  db.contactsList = db.contactsList || [];
 
   // Screen time tracking timestamp
   db.sessionStart = Date.now();
@@ -199,27 +205,36 @@ function navigateTo(screenIndex) {
 
 // Touch swipe gesture support
 let touchStartX = 0;
+let touchStartY = 0;
 let touchEndX = 0;
+let touchEndY = 0;
 
 document.querySelector('.viewport').addEventListener('touchstart', e => {
   touchStartX = e.changedTouches[0].screenX;
+  touchStartY = e.changedTouches[0].screenY;
 }, { passive: true });
 
 document.querySelector('.viewport').addEventListener('touchend', e => {
   touchEndX = e.changedTouches[0].screenX;
+  touchEndY = e.changedTouches[0].screenY;
   handleSwipeGesture();
 }, { passive: true });
 
 function handleSwipeGesture() {
-  const threshold = 60;
-  if (touchStartX - touchEndX > threshold && currentScreen === 0) {
-    navigateTo(1); // Swipe Left -> Go to Dashboard
-  }
-  if (touchEndX - touchStartX > threshold && currentScreen === 1) {
-    // Check if dragging inside scrollable areas to avoid overriding scrolling
-    const activeEl = document.activeElement;
-    if (activeEl && activeEl.tagName === 'INPUT') return;
-    navigateTo(0); // Swipe Right -> Go to Home Launcher
+  const threshold = 80; // slightly higher threshold to prevent accidental triggers
+  const diffX = touchEndX - touchStartX;
+  const diffY = touchEndY - touchStartY;
+  
+  // Only trigger swipe navigation if the horizontal drag is dominant and exceeds threshold
+  if (Math.abs(diffX) > Math.abs(diffY) && Math.abs(diffX) > threshold) {
+    if (diffX < 0 && currentScreen === 0) {
+      navigateTo(1); // Swipe Left -> Go to Dashboard
+    } else if (diffX > 0 && currentScreen === 1) {
+      // Check if typing in input to avoid swiping back
+      const activeEl = document.activeElement;
+      if (activeEl && (activeEl.tagName === 'INPUT' || activeEl.tagName === 'TEXTAREA')) return;
+      navigateTo(0); // Swipe Right -> Go to Home Launcher
+    }
   }
 }
 
