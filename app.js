@@ -1057,5 +1057,9 @@ function renderAnalytics() {
   chartBox.innerHTML = svgContent;
 }
 
-// Initial analytics paint
-renderAnalytics();
+// Initial analytics paint safely
+try {
+  renderAnalytics();
+} catch (e) {
+  console.error("Analytics rendering error on load:", e);
+}
