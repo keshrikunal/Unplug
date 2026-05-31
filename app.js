@@ -37,22 +37,72 @@ const REFLECTIONS = {
   ]
 };
 
-// ── INITIAL STATE CONFIGURATION ──
+// ── GLOBAL STATE & DATABASE variables ──
 const TODAY = new Date().toDateString();
 let db = {};
-try {
-  db = JSON.parse(localStorage.getItem('minPhoneData') || '{}') || {};
-} catch (e) {
-  console.error("Corrupted local storage database detected, resetting:", e);
-  localStorage.removeItem('minPhoneData');
-  db = {};
+let currentScreen = 0; // 0 = Home, 1 = My Day, 2 = Stats & Settings
+let isPageVisible = !document.hidden;
+
+// Curfew state variables
+let curfewBypassed = false;
+let curfewSnoozeUntil = 0;
+
+// Call simulation timers
+let activeCallInterval = null;
+let activeCallSeconds = 0;
+
+// Focus countdown variables
+let timerInterval = null;
+let timerTotalSeconds = 1500;
+let timerSecondsLeft = 1500;
+let timerIsRunning = false;
+
+// Touch Swipe Coordinates
+let touchStartX = 0;
+let touchStartY = 0;
+let touchEndX = 0;
+let touchEndY = 0;
+
+// Days & Months Formatting Array
+const daysOfWeek = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+// ── CORE DATA ACCESSORS ──
+function loadDatabase() {
+  try {
+    db = JSON.parse(localStorage.getItem('minPhoneData') || '{}') || {};
+  } catch (e) {
+    console.error("Corrupted local storage database, resetting:", e);
+    localStorage.removeItem('minPhoneData');
+    db = {};
+  }
+}
+
+function saveDb() {
+  localStorage.setItem('minPhoneData', JSON.stringify(db));
+}
+
+function calculateHabitsPercent(data) {
+  let count = 0;
+  let total = 3; // 3 default checklist options
+  if (data.habitsChecked.walk) count++;
+  if (data.habitsChecked.meditate) count++;
+  if (data.habitsChecked.screenbed) count++;
+  
+  if (data.customTasks && data.customTasks.length > 0) {
+    data.customTasks.forEach(t => {
+      total++;
+      if (t.completed) count++;
+    });
+  }
+  return Math.round((count / total) * 100);
 }
 
 function initializeDatabase() {
   const defaultDb = {
     day: TODAY,
     opens: 0,
-    screentime: 0, // in ms
+    screentime: 0, // ms
     streak: 1,
     lastActiveDay: "",
     calls: 0,
@@ -63,13 +113,15 @@ function initializeDatabase() {
     soundEnabled: false,
     customTasks: [],
     habitsChecked: { walk: false, meditate: false, screenbed: false },
-    feelingsLogs: [], // array of { time: DateStr, feeling: string }
-    history: [], // past 7 days of summaries
+    feelingsLogs: [],
+    history: [],
     guideCheckboxes: { pwa: false, distractions: false, grayscale: false },
-    theme: "theme-obsidian"
+    theme: "theme-obsidian",
+    contactsList: [],
+    username: "",
+    dailyQuoteIndex: Math.floor(Math.random() * QUOTES.length)
   };
 
-  // Merge default values to preserve existing user data on update (deep default check)
   db = { ...defaultDb, ...db };
   db.habitsChecked = { ...defaultDb.habitsChecked, ...db.habitsChecked };
   db.guideCheckboxes = { ...defaultDb.guideCheckboxes, ...db.guideCheckboxes };
@@ -78,12 +130,8 @@ function initializeDatabase() {
   db.history = db.history || [];
   db.contactsList = db.contactsList || [];
 
-  // Screen time tracking timestamp
-  db.sessionStart = Date.now();
-
-  // Reset trackers if it's a new calendar day
+  // Reset trackers if it's a new day
   if (db.day !== TODAY) {
-    // Record history
     const yesterdaySummary = {
       day: db.day,
       opens: db.opens,
@@ -103,7 +151,6 @@ function initializeDatabase() {
       db.streak = 1;
     }
 
-    // Reset daily values
     db.day = TODAY;
     db.opens = 0;
     db.screentime = 0;
@@ -111,55 +158,22 @@ function initializeDatabase() {
     db.waterIntake = 0;
     db.habitsChecked = { walk: false, meditate: false, screenbed: false };
     db.feelingsLogs = [];
-    
-    // Clear checklist custom tasks completion status
     db.customTasks.forEach(task => task.completed = false);
+    db.dailyQuoteIndex = Math.floor(Math.random() * QUOTES.length);
   }
 
   db.opens++;
+  db.sessionStart = Date.now();
   saveDb();
 }
 
-function saveDb() {
-  localStorage.setItem('minPhoneData', JSON.stringify(db));
-}
-
-function calculateHabitsPercent(data) {
-  let count = 0;
-  let total = 3;
-  if (data.habitsChecked.walk) count++;
-  if (data.habitsChecked.meditate) count++;
-  if (data.habitsChecked.screenbed) count++;
-  
-  if (data.customTasks && data.customTasks.length > 0) {
-    data.customTasks.forEach(t => {
-      total++;
-      if (t.completed) count++;
-    });
-  }
-  return Math.round((count / total) * 100);
-}
-
-// Initialize on execution
-initializeDatabase();
-
-// ── DOM ELEMENTS & GLOBAL VARIABLES ──
-let currentScreen = 0; // 0 = Home, 1 = Dashboard
-let timerInterval = null;
-let timerTotalSeconds = 1500; // 25 minutes default
-let timerSecondsLeft = 1500;
-let timerIsRunning = false;
-let activeCallInterval = null;
-let activeCallSeconds = 0;
-
-// Haptic trigger
+// ── SYSTEM UTILITIES (HAPTIC / ALARM) ──
 function triggerHaptic() {
   if (db.hapticsEnabled && 'vibrate' in navigator) {
     navigator.vibrate(12);
   }
 }
 
-// Play UI sounds
 function playSound(type) {
   if (!db.soundEnabled) return;
   try {
@@ -180,7 +194,6 @@ function playSound(type) {
       osc.frequency.setValueAtTime(440, audioCtx.currentTime);
       gain.gain.setValueAtTime(0.2, audioCtx.currentTime);
       osc.start();
-      // Simple alarm beep pattern
       osc.frequency.setValueAtTime(554, audioCtx.currentTime + 0.2);
       osc.frequency.setValueAtTime(659, audioCtx.currentTime + 0.4);
       osc.stop(audioCtx.currentTime + 0.8);
@@ -196,138 +209,184 @@ function playSound(type) {
   }
 }
 
-// ── SCREEN NAVIGATION ──
-const viewportWrapper = document.getElementById('viewport-wrapper');
+// ── REAL TIME BATTERY STATUS (BATTERY STATUS API) ──
+function initBatteryAPI() {
+  const statusBattery = document.getElementById('status-battery');
+  if (!statusBattery) return;
 
-function navigateTo(screenIndex) {
-  triggerHaptic();
-  currentScreen = screenIndex;
-  if (screenIndex === 0) {
-    viewportWrapper.style.transform = 'translateX(0)';
+  if ('getBattery' in navigator) {
+    navigator.getBattery().then(battery => {
+      function updateBatteryInfo() {
+        const pct = Math.round(battery.level * 100);
+        statusBattery.textContent = `${pct}%`;
+      }
+      updateBatteryInfo();
+      battery.addEventListener('levelchange', updateBatteryInfo);
+    });
   } else {
-    viewportWrapper.style.transform = 'translateX(-50%)';
-    renderAnalytics(); // Refresh graphs when entering dashboard
+    // Hide battery indicator if unsupported (e.g. desktop Firefox/Safari)
+    statusBattery.style.display = 'none';
   }
 }
 
-// Touch swipe gesture support
-let touchStartX = 0;
-let touchStartY = 0;
-let touchEndX = 0;
-let touchEndY = 0;
+// ── SYSTEM NAVIGATION & ROUTER ──
+function navigateTo(screenIndex) {
+  triggerHaptic();
+  currentScreen = screenIndex;
+  
+  const viewportWrapper = document.getElementById('viewport-wrapper');
+  if (viewportWrapper) {
+    if (screenIndex === 0) {
+      viewportWrapper.style.transform = 'translateX(0)';
+    } else if (screenIndex === 1) {
+      viewportWrapper.style.transform = 'translateX(-33.3333%)';
+      updateGreeting();
+    } else {
+      viewportWrapper.style.transform = 'translateX(-66.6666%)';
+      renderAnalytics(); // Refresh graphs when entering stats page
+    }
+  }
 
-document.querySelector('.viewport').addEventListener('touchstart', e => {
-  touchStartX = e.changedTouches[0].screenX;
-  touchStartY = e.changedTouches[0].screenY;
-}, { passive: true });
-
-document.querySelector('.viewport').addEventListener('touchend', e => {
-  touchEndX = e.changedTouches[0].screenX;
-  touchEndY = e.changedTouches[0].screenY;
-  handleSwipeGesture();
-}, { passive: true });
+  // Update Bottom Tab Active States
+  const tabs = ['tab-btn-home', 'tab-btn-myday', 'tab-btn-stats'];
+  tabs.forEach((tabId, idx) => {
+    const tabEl = document.getElementById(tabId);
+    if (tabEl) {
+      if (idx === screenIndex) tabEl.classList.add('active');
+      else tabEl.classList.remove('active');
+    }
+  });
+}
 
 function handleSwipeGesture() {
-  const threshold = 80; // slightly higher threshold to prevent accidental triggers
+  const threshold = 80;
   const diffX = touchEndX - touchStartX;
   const diffY = touchEndY - touchStartY;
   
-  // Only trigger swipe navigation if the horizontal drag is dominant and exceeds threshold
   if (Math.abs(diffX) > Math.abs(diffY) && Math.abs(diffX) > threshold) {
-    if (diffX < 0 && currentScreen === 0) {
-      navigateTo(1); // Swipe Left -> Go to Dashboard
-    } else if (diffX > 0 && currentScreen === 1) {
-      // Check if typing in input to avoid swiping back
-      const activeEl = document.activeElement;
-      if (activeEl && (activeEl.tagName === 'INPUT' || activeEl.tagName === 'TEXTAREA')) return;
-      navigateTo(0); // Swipe Right -> Go to Home Launcher
+    const activeEl = document.activeElement;
+    if (activeEl && (activeEl.tagName === 'INPUT' || activeEl.tagName === 'TEXTAREA')) return;
+    
+    if (diffX < 0) {
+      // Swipe Left -> next
+      if (currentScreen === 0) navigateTo(1);
+      else if (currentScreen === 1) navigateTo(2);
+    } else {
+      // Swipe Right -> prev
+      if (currentScreen === 2) navigateTo(1);
+      else if (currentScreen === 1) navigateTo(0);
     }
   }
 }
 
 // ── UTILITY DATES & TIME CLOCK ──
-const daysOfWeek = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-
 function updateClocks() {
+  if (isPageVisible) {
+    const elapsed = Date.now() - db.sessionStart;
+    db.screentime += elapsed;
+    db.sessionStart = Date.now();
+    saveDb();
+  }
+
   const now = new Date();
   const hours = String(now.getHours()).padStart(2, '0');
   const minutes = String(now.getMinutes()).padStart(2, '0');
   const timeString = `${hours}:${minutes}`;
 
-  // Update DOM clocks
-  document.getElementById('status-time').textContent = timeString;
-  document.getElementById('home-clock').textContent = timeString;
+  // Update Status and Main Clocks
+  const statusTime = document.getElementById('status-time');
+  const homeClock = document.getElementById('home-clock');
+  const homeDate = document.getElementById('home-date');
+  const myDayDate = document.getElementById('myday-date-label');
 
-  // Format date
+  if (statusTime) statusTime.textContent = timeString;
+  if (homeClock) homeClock.textContent = timeString;
+
+  // Format date display
   const dayName = daysOfWeek[now.getDay()];
   const monthName = months[now.getMonth()];
   const dateVal = now.getDate();
   const dateString = `${dayName}, ${monthName} ${String(dateVal).padStart(2, '0')}`;
-  document.getElementById('home-date').textContent = dateString;
+  
+  if (homeDate) homeDate.textContent = dateString;
+  if (myDayDate) myDayDate.textContent = `${dayName}, ${monthName} ${dateVal}`;
 
-  // Track screen time (add elapsed time from last update)
-  const elapsed = Date.now() - db.sessionStart;
-  db.screentime += elapsed;
-  db.sessionStart = Date.now();
-  saveDb();
-
-  // Refresh home page stats pills
+  // Refresh stats values
   updateHomeStats();
   
-  // Bedtime check
+  // Bedtime Lockdown Check
   checkBedtimeLock();
 }
 
 function updateHomeStats() {
   const activeMin = Math.round(db.screentime / 60000);
-  document.getElementById('home-opens').textContent = db.opens;
-  document.getElementById('home-screentime').textContent = activeMin < 60 ? activeMin + 'm' : Math.floor(activeMin / 60) + 'h ' + (activeMin % 60) + 'm';
-  document.getElementById('home-streak').textContent = db.streak;
+  
+  const opensEl = document.getElementById('home-opens');
+  const screentimeEl = document.getElementById('home-screentime');
+  const streakEl = document.getElementById('home-streak');
+
+  if (opensEl) opensEl.textContent = db.opens;
+  if (streakEl) streakEl.textContent = db.streak;
+  if (screentimeEl) {
+    screentimeEl.textContent = activeMin < 60 
+      ? activeMin + 'm' 
+      : Math.floor(activeMin / 60) + 'h ' + (activeMin % 60) + 'm';
+  }
 }
 
-// Initial clock update and timer intervals
-updateClocks();
-setInterval(updateClocks, 1000);
-
-// Set Battery Mock
-function updateBatteryMock() {
-  const batVal = Math.floor(Math.random() * 20) + 70; // 70 to 90%
-  document.getElementById('status-battery').textContent = batVal + '%';
-}
-updateBatteryMock();
-
-// ── DAILY QUOTES COMPONENT ──
-const quoteText = document.getElementById('quote-text');
-const quoteAuthor = document.getElementById('quote-author');
-const quoteContainer = document.getElementById('quote-container');
-
-let quoteIndex = Math.floor(Math.random() * QUOTES.length);
-
-function cycleQuote() {
-  triggerHaptic();
-  quoteIndex = (quoteIndex + 1) % QUOTES.length;
-  quoteText.style.opacity = '0';
-  quoteAuthor.style.opacity = '0';
-  setTimeout(() => {
-    quoteText.textContent = `"${QUOTES[quoteIndex].text}"`;
-    quoteAuthor.textContent = QUOTES[quoteIndex].author;
-    quoteText.style.opacity = '1';
-    quoteAuthor.style.opacity = '0.7';
-  }, 200);
+// ── DAILY USER GREETINGS ──
+function updateGreeting() {
+  const greetingEl = document.getElementById('greeting-title');
+  if (!greetingEl) return;
+  const hr = new Date().getHours();
+  const name = db.username ? db.username.trim() : "friend";
+  
+  let greet = "My Day";
+  if (hr < 12) greet = `Good morning, ${name}`;
+  else if (hr < 17) greet = `Good afternoon, ${name}`;
+  else greet = `Good evening, ${name}`;
+  
+  greetingEl.textContent = greet;
 }
 
-// Double tap or click quote to change
-quoteContainer.addEventListener('click', cycleQuote);
-// Initial quote paint
-quoteText.textContent = `"${QUOTES[quoteIndex].text}"`;
-quoteAuthor.textContent = QUOTES[quoteIndex].author;
+// ── DAILY QUOTES LOGIC ──
+function setupQuotes() {
+  const quoteText = document.getElementById('quote-text');
+  const quoteAuthor = document.getElementById('quote-author');
+  const quoteContainer = document.getElementById('quote-container');
 
-// ── MODAL TOGGLES ──
+  if (!quoteText || !quoteAuthor || !quoteContainer) return;
+
+  // Display daily quote from index
+  const index = db.dailyQuoteIndex || 0;
+  quoteText.textContent = `"${QUOTES[index].text}"`;
+  quoteAuthor.textContent = QUOTES[index].author;
+
+  // Cycle quote when double-clicked
+  quoteContainer.addEventListener('click', () => {
+    triggerHaptic();
+    db.dailyQuoteIndex = (db.dailyQuoteIndex + 1) % QUOTES.length;
+    saveDb();
+    
+    quoteText.style.opacity = '0';
+    quoteAuthor.style.opacity = '0';
+    setTimeout(() => {
+      const idx = db.dailyQuoteIndex;
+      quoteText.textContent = `"${QUOTES[idx].text}"`;
+      quoteAuthor.textContent = QUOTES[idx].author;
+      quoteText.style.opacity = '1';
+      quoteAuthor.style.opacity = '0.7';
+    }, 200);
+  });
+}
+
+// ── MODAL HELPERS ──
 function registerModal(triggerId, overlayId, closeId, onOpen = null, onClose = null) {
   const trigger = document.getElementById(triggerId);
   const overlay = document.getElementById(overlayId);
   const closeBtn = document.getElementById(closeId);
+
+  if (!overlay) return;
 
   if (trigger) {
     trigger.addEventListener('click', () => {
@@ -344,34 +403,18 @@ function registerModal(triggerId, overlayId, closeId, onOpen = null, onClose = n
   };
 
   if (closeBtn) closeBtn.addEventListener('click', hideModal);
-  
-  // Close when tapping backdrop
   overlay.addEventListener('click', (e) => {
     if (e.target === overlay) hideModal();
   });
 }
 
-// Open modals
-registerModal('btn-dialer-trigger', 'overlay-dialer', 'btn-dialer-close', renderContacts);
-registerModal('btn-whatsapp-trigger', 'overlay-whatsapp', 'btn-whatsapp-close');
-registerModal('btn-settings-trigger', 'overlay-settings', 'btn-settings-close', populateSettings);
-
-// Toggle contacts drawer inside Dialer
-const btnToggleContacts = document.getElementById('btn-toggle-contacts');
-const contactsDrawer = document.getElementById('contacts-drawer');
-const dialerNumericPad = document.getElementById('dialer-numeric-pad');
-
-btnToggleContacts.addEventListener('click', () => {
-  triggerHaptic();
-  contactsDrawer.classList.toggle('hidden');
-  dialerNumericPad.classList.toggle('hidden');
-});
-
-// ── DIALER & CONTACTS LOGIC ──
-const dialDisplay = document.getElementById('dial-display');
+// ── DIALER SIMULATION & QUICK CONTACTS ──
 let inputNumber = "";
 
 function updateDialDisplay() {
+  const dialDisplay = document.getElementById('dial-display');
+  if (!dialDisplay) return;
+
   if (inputNumber === "") {
     dialDisplay.textContent = "Enter number to call";
     dialDisplay.classList.add('placeholder');
@@ -381,47 +424,18 @@ function updateDialDisplay() {
   }
 }
 
-// Keypad tap
-document.querySelectorAll('.dial-key').forEach(button => {
-  button.addEventListener('click', () => {
-    const val = button.getAttribute('data-val');
-    if (!val) return; // Deluxe action buttons handled separately
-    triggerHaptic();
-    playSound('tick');
-    if (inputNumber.length >= 18) return;
-    inputNumber += val;
-    updateDialDisplay();
-  });
-});
-
-// Del button
-document.getElementById('btn-dial-del').addEventListener('click', () => {
-  triggerHaptic();
-  inputNumber = inputNumber.slice(0, -1);
-  updateDialDisplay();
-});
-
-// Custom long-press del for full clear
-document.getElementById('btn-dial-del').addEventListener('dblclick', () => {
-  triggerHaptic();
-  inputNumber = "";
-  updateDialDisplay();
-});
-
-// Call button
-const activeCallOverlay = document.getElementById('overlay-active-call');
-const activeCallName = document.getElementById('active-call-name');
-const activeCallStatus = document.getElementById('active-call-status');
-const activeCallTimer = document.getElementById('active-call-timer');
-
-document.getElementById('btn-dial-call').addEventListener('click', startCallSimulation);
-
 function startCallSimulation() {
   if (inputNumber === "") return;
   triggerHaptic();
   playSound('call');
   
-  // Lookup name
+  const activeCallOverlay = document.getElementById('overlay-active-call');
+  const activeCallName = document.getElementById('active-call-name');
+  const activeCallStatus = document.getElementById('active-call-status');
+  const activeCallTimer = document.getElementById('active-call-timer');
+
+  if (!activeCallOverlay) return;
+
   let displayName = inputNumber;
   const match = db.contactsList && db.contactsList.find(c => c.phone === inputNumber);
   if (match) displayName = match.name;
@@ -431,7 +445,6 @@ function startCallSimulation() {
   activeCallTimer.textContent = "00:00";
   
   activeCallOverlay.classList.add('open');
-  
   activeCallSeconds = 0;
   
   setTimeout(() => {
@@ -444,56 +457,103 @@ function startCallSimulation() {
     }, 1000);
   }, 1500);
 
-  // Increment call statistic
   db.calls++;
   saveDb();
 }
 
-// Hangup button
-document.getElementById('btn-hangup').addEventListener('click', () => {
-  triggerHaptic();
-  clearInterval(activeCallInterval);
-  activeCallStatus.textContent = "Call Ended";
-  setTimeout(() => {
-    activeCallOverlay.classList.remove('open');
-    // Open Dialer link to trigger actual device tel link on mobile if dialNumber is input
-    if (inputNumber !== "") {
-      window.location.href = `tel:${inputNumber}`;
-    }
-  }, 800);
-});
+function setupDialer() {
+  const btnToggleContacts = document.getElementById('btn-toggle-contacts');
+  const contactsDrawer = document.getElementById('contacts-drawer');
+  const dialerNumericPad = document.getElementById('dialer-numeric-pad');
 
-// Contacts CRUD
-const contactsContainer = document.getElementById('contacts-list-container');
-const formAddContact = document.getElementById('form-add-contact');
+  if (btnToggleContacts && contactsDrawer && dialerNumericPad) {
+    btnToggleContacts.addEventListener('click', () => {
+      triggerHaptic();
+      contactsDrawer.classList.toggle('hidden');
+      dialerNumericPad.classList.toggle('hidden');
+    });
+  }
 
-formAddContact.addEventListener('submit', (e) => {
-  e.preventDefault();
-  triggerHaptic();
-  const name = document.getElementById('input-contact-name').value.trim();
-  const phone = document.getElementById('input-contact-phone').value.trim();
-  
-  if (!db.contactsList) db.contactsList = [];
-  
-  // Add to contact array
-  db.contactsList.push({ name, phone });
-  saveDb();
-  
-  // Clean form & repaint
-  formAddContact.reset();
-  renderContacts();
-});
+  // Keypad clicks
+  document.querySelectorAll('.dial-key').forEach(button => {
+    button.addEventListener('click', () => {
+      const val = button.getAttribute('data-val');
+      if (!val) return;
+      triggerHaptic();
+      playSound('tick');
+      if (inputNumber.length >= 18) return;
+      inputNumber += val;
+      updateDialDisplay();
+    });
+  });
+
+  const delBtn = document.getElementById('btn-dial-del');
+  if (delBtn) {
+    delBtn.addEventListener('click', () => {
+      triggerHaptic();
+      inputNumber = inputNumber.slice(0, -1);
+      updateDialDisplay();
+    });
+    delBtn.addEventListener('dblclick', () => {
+      triggerHaptic();
+      inputNumber = "";
+      updateDialDisplay();
+    });
+  }
+
+  const callBtn = document.getElementById('btn-dial-call');
+  if (callBtn) callBtn.addEventListener('click', startCallSimulation);
+
+  const hangupBtn = document.getElementById('btn-hangup');
+  if (hangupBtn) {
+    hangupBtn.addEventListener('click', () => {
+      triggerHaptic();
+      clearInterval(activeCallInterval);
+      const activeCallStatus = document.getElementById('active-call-status');
+      const activeCallOverlay = document.getElementById('overlay-active-call');
+      
+      if (activeCallStatus) activeCallStatus.textContent = "Call Ended";
+      
+      setTimeout(() => {
+        if (activeCallOverlay) activeCallOverlay.classList.remove('open');
+        if (inputNumber !== "") {
+          window.location.href = `tel:${inputNumber}`;
+        }
+      }, 800);
+    });
+  }
+
+  // Contact CRUD Binding
+  const formAddContact = document.getElementById('form-add-contact');
+  if (formAddContact) {
+    formAddContact.addEventListener('submit', (e) => {
+      e.preventDefault();
+      triggerHaptic();
+      const nameVal = document.getElementById('input-contact-name').value.trim();
+      const phoneVal = document.getElementById('input-contact-phone').value.trim();
+      
+      if (!db.contactsList) db.contactsList = [];
+      db.contactsList.push({ name: nameVal, phone: phoneVal });
+      saveDb();
+      
+      formAddContact.reset();
+      renderContacts();
+    });
+  }
+}
 
 function renderContacts() {
-  contactsContainer.innerHTML = "";
+  const container = document.getElementById('contacts-list-container');
+  if (!container) return;
+
+  container.innerHTML = "";
   const contacts = db.contactsList || [];
   
   if (contacts.length === 0) {
-    contactsContainer.innerHTML = '<span style="font-size:11px;color:var(--muted);text-align:center;padding:12px 0;">No contacts saved.</span>';
+    container.innerHTML = '<span style="font-size:11px;color:var(--muted);text-align:center;padding:12px 0;">No contacts saved.</span>';
     return;
   }
   
-  // Sort alphabetically
   contacts.sort((a,b) => a.name.localeCompare(b.name)).forEach((contact, idx) => {
     const card = document.createElement('div');
     card.className = "contact-item";
@@ -507,16 +567,18 @@ function renderContacts() {
         <button class="btn-contact-del" data-idx="${idx}">×</button>
       </div>
     `;
-    contactsContainer.appendChild(card);
+    container.appendChild(card);
   });
   
-  // Attach quick-call & delete events
+  // Quick dial contacts bindings
   document.querySelectorAll('.btn-contact-call').forEach(btn => {
     btn.addEventListener('click', (e) => {
       inputNumber = e.target.getAttribute('data-num');
       updateDialDisplay();
-      contactsDrawer.classList.add('hidden');
-      dialerNumericPad.classList.remove('hidden');
+      const drawer = document.getElementById('contacts-drawer');
+      const pad = document.getElementById('dialer-numeric-pad');
+      if (drawer) drawer.classList.add('hidden');
+      if (pad) pad.classList.remove('hidden');
       startCallSimulation();
     });
   });
@@ -532,72 +594,69 @@ function renderContacts() {
   });
 }
 
-// ── WHATSAPP REDIRECT FORM ──
-const formWhatsApp = document.getElementById('form-whatsapp-chat');
-formWhatsApp.addEventListener('submit', (e) => {
-  e.preventDefault();
-  triggerHaptic();
-  let num = document.getElementById('input-whatsapp-phone').value.trim();
-  // Strip symbols
-  num = num.replace(/[+\s-()]/g, "");
-  if (num) {
-    window.location.href = `https://wa.me/${num}`;
-  }
-});
+// ── WHATSAPP FORM MESSAGE ──
+function setupWhatsApp() {
+  const form = document.getElementById('form-whatsapp-chat');
+  if (!form) return;
 
-// ── WIDGET: FEELINGS TRACKER ──
-const feelingsPills = document.querySelectorAll('.feeling-pill');
-const reflectionBox = document.getElementById('reflection-box');
-const reflectionText = document.getElementById('reflection-text');
-const reflectionAuthor = document.getElementById('reflection-author');
-
-feelingsPills.forEach(pill => {
-  pill.addEventListener('click', () => {
-    const feeling = pill.getAttribute('data-feeling');
-    
-    // Highlight UI
-    feelingsPills.forEach(p => p.classList.remove('active'));
-    pill.classList.add('active');
-    
+  form.addEventListener('submit', (e) => {
+    e.preventDefault();
     triggerHaptic();
-    playSound('tick');
-    
-    // Write log to DB
-    db.feelingsLogs.push({
-      time: Date.now(),
-      feeling: feeling
-    });
-    saveDb();
-    
-    // Render custom mind reflection
-    const entries = REFLECTIONS[feeling] || QUOTES;
-    const item = entries[Math.floor(Math.random() * entries.length)];
-    
-    reflectionBox.classList.remove('hidden');
-    reflectionText.style.opacity = '0';
-    setTimeout(() => {
-      reflectionText.textContent = `"${item.text}"`;
-      reflectionAuthor.textContent = `— ${item.author}`;
-      reflectionText.style.opacity = '1';
-    }, 200);
-    
-    // Refresh SVG analytics bar graph instantly
-    renderMoodTimeline();
-    renderAnalytics();
+    let num = document.getElementById('input-whatsapp-phone').value.trim();
+    num = num.replace(/[+\s-()]/g, "");
+    if (num) {
+      window.location.href = `https://wa.me/${num}`;
+    }
   });
-});
+}
+
+// ── MIND FEELINGS LOGGER ──
+function setupFeelings() {
+  const feelingsPills = document.querySelectorAll('.feeling-pill');
+  const reflectionBox = document.getElementById('reflection-box');
+  const reflectionText = document.getElementById('reflection-text');
+  const reflectionAuthor = document.getElementById('reflection-author');
+
+  feelingsPills.forEach(pill => {
+    pill.addEventListener('click', () => {
+      const feeling = pill.getAttribute('data-feeling');
+      
+      feelingsPills.forEach(p => p.classList.remove('active'));
+      pill.classList.add('active');
+      
+      triggerHaptic();
+      playSound('tick');
+      
+      db.feelingsLogs.push({
+        time: Date.now(),
+        feeling: feeling
+      });
+      saveDb();
+      
+      const entries = REFLECTIONS[feeling] || QUOTES;
+      const item = entries[Math.floor(Math.random() * entries.length)];
+      
+      if (reflectionBox) reflectionBox.classList.remove('hidden');
+      if (reflectionText) reflectionText.textContent = `"${item.text}"`;
+      if (reflectionAuthor) reflectionAuthor.textContent = `— ${item.author}`;
+      
+      renderMoodTimeline();
+      renderAnalytics();
+    });
+  });
+}
 
 function renderMoodTimeline() {
   const timeline = document.getElementById('mood-timeline-bar');
+  if (!timeline) return;
+
   timeline.innerHTML = "";
-  
   const logs = db.feelingsLogs || [];
   if (logs.length === 0) {
     timeline.innerHTML = '<span class="timeline-empty">No feelings logged today.</span>';
     return;
   }
   
-  // Calculate relative segments
   logs.forEach(log => {
     const segment = document.createElement('div');
     segment.className = `mood-bar-segment feel-${log.feeling}`;
@@ -607,21 +666,17 @@ function renderMoodTimeline() {
   });
 }
 
-// ── WIDGET: FOCUS TIMER ──
-const timerClock = document.getElementById('dashboard-timer-clock');
-const timerLabel = document.getElementById('dashboard-timer-label');
-const timerProgress = document.getElementById('timer-progress');
-const btnTimerToggle = document.getElementById('btn-timer-toggle');
-const btnTimerReset = document.getElementById('btn-timer-reset');
-
-// Circumference of circular timer progress meter
-const circumference = 2 * Math.PI * 76; // r=76 -> 477.5
-timerProgress.style.strokeDasharray = `${circumference} ${circumference}`;
-timerProgress.style.strokeDashoffset = circumference;
-
+// ── FOCUS TIMER CONTROLLER ──
 function updateTimerProgress() {
+  const timerClock = document.getElementById('dashboard-timer-clock');
+  const timerProgress = document.getElementById('timer-progress');
+  if (!timerClock || !timerProgress) return;
+
+  const circumference = 2 * Math.PI * 76;
   const ratio = timerSecondsLeft / timerTotalSeconds;
   const offset = circumference - (ratio * circumference);
+  
+  timerProgress.style.strokeDasharray = `${circumference} ${circumference}`;
   timerProgress.style.strokeDashoffset = isNaN(offset) ? circumference : offset;
   
   const m = String(Math.floor(timerSecondsLeft / 60)).padStart(2, '0');
@@ -637,163 +692,180 @@ function setupTimer(mins) {
   timerSecondsLeft = timerTotalSeconds;
   
   updateTimerProgress();
-  timerLabel.textContent = "Stay focused";
-  btnTimerToggle.textContent = "Start";
-  btnTimerToggle.className = 'timer-ctrl-btn primary';
+  const label = document.getElementById('dashboard-timer-label');
+  const toggleBtn = document.getElementById('btn-timer-toggle');
+
+  if (label) label.textContent = "Stay focused";
+  if (toggleBtn) {
+    toggleBtn.textContent = "Start";
+    toggleBtn.className = 'timer-ctrl-btn primary';
+  }
   
-  // Update UI preset selection
   document.querySelectorAll('.preset-btn').forEach(btn => {
     btn.classList.remove('active');
     if (btn.textContent === `${mins}m`) btn.classList.add('active');
   });
 }
 
-btnTimerToggle.addEventListener('click', () => {
-  triggerHaptic();
-  if (timerIsRunning) {
-    // Pause
-    clearInterval(timerInterval);
-    timerIsRunning = false;
-    timerLabel.textContent = "Paused";
-    btnTimerToggle.textContent = "Resume";
-  } else {
-    // Start
-    timerIsRunning = true;
-    timerLabel.textContent = "Stay focused 🌿";
-    btnTimerToggle.textContent = "Pause";
-    
-    timerInterval = setInterval(() => {
-      timerSecondsLeft--;
-      updateTimerProgress();
-      
-      if (timerSecondsLeft <= 0) {
+function setupTimerBindings() {
+  const toggleBtn = document.getElementById('btn-timer-toggle');
+  const resetBtn = document.getElementById('btn-timer-reset');
+  const label = document.getElementById('dashboard-timer-label');
+
+  if (toggleBtn) {
+    toggleBtn.addEventListener('click', () => {
+      triggerHaptic();
+      if (timerIsRunning) {
         clearInterval(timerInterval);
         timerIsRunning = false;
-        timerLabel.textContent = "✓ Complete!";
-        btnTimerToggle.textContent = "Start";
-        playSound('alarm');
+        if (label) label.textContent = "Paused";
+        toggleBtn.textContent = "Resume";
+      } else {
+        timerIsRunning = true;
+        if (label) label.textContent = "Stay focused 🌿";
+        toggleBtn.textContent = "Pause";
         
-        // Push Native Notification
-        if ('Notification' in window && Notification.permission === 'granted') {
-          new Notification("Focus Session Complete!", {
-            body: "Great job keeping off your screens! Take a slow stretch.",
-            icon: "./icon.svg"
-          });
-        }
+        timerInterval = setInterval(() => {
+          timerSecondsLeft--;
+          updateTimerProgress();
+          
+          if (timerSecondsLeft <= 0) {
+            clearInterval(timerInterval);
+            timerIsRunning = false;
+            if (label) label.textContent = "✓ Complete!";
+            toggleBtn.textContent = "Start";
+            playSound('alarm');
+            
+            if ('Notification' in window && Notification.permission === 'granted') {
+              new Notification("Focus Session Complete!", {
+                body: "Great job keeping off your screens! Take a slow stretch.",
+                icon: "./icon.svg"
+              });
+            }
+          }
+        }, 1000);
       }
-    }, 1000);
+    });
   }
-});
 
-btnTimerReset.addEventListener('click', () => {
-  triggerHaptic();
-  clearInterval(timerInterval);
-  timerIsRunning = false;
-  timerSecondsLeft = timerTotalSeconds;
+  if (resetBtn) {
+    resetBtn.addEventListener('click', () => {
+      triggerHaptic();
+      clearInterval(timerInterval);
+      timerIsRunning = false;
+      timerSecondsLeft = timerTotalSeconds;
+      updateTimerProgress();
+      if (label) label.textContent = "Stay focused";
+      if (toggleBtn) toggleBtn.textContent = "Start";
+    });
+  }
+
+  if ('Notification' in window && Notification.permission === 'default') {
+    Notification.requestPermission();
+  }
   updateTimerProgress();
-  timerLabel.textContent = "Stay focused";
-  btnTimerToggle.textContent = "Start";
-});
-
-// Notification permissions request
-if ('Notification' in window && Notification.permission === 'default') {
-  Notification.requestPermission();
 }
 
-// Initial draw
-updateTimerProgress();
-
-// ── WIDGET: WATER TRACKER ──
-const waterFill = document.getElementById('water-fill-level');
-const waterText = document.getElementById('water-glass-text');
-const waterCountVal = document.getElementById('water-count');
-
+// ── WATER TRACKER CONTROLLER ──
 function updateWaterUI() {
+  const fill = document.getElementById('water-fill-level');
+  const text = document.getElementById('water-glass-text');
+  const count = document.getElementById('water-count');
+
+  if (!fill || !text || !count) return;
+
   const cups = db.waterIntake || 0;
   const target = db.waterTarget || 8;
   
-  waterCountVal.textContent = cups;
-  waterText.textContent = `${cups} / ${target}`;
+  count.textContent = cups;
+  text.textContent = `${cups} / ${target}`;
   
   const fillPct = Math.min((cups / target) * 100, 100);
-  waterFill.style.height = `${fillPct}%`;
+  fill.style.height = `${fillPct}%`;
 }
 
-document.getElementById('btn-water-plus').addEventListener('click', () => {
-  triggerHaptic();
-  playSound('tick');
-  db.waterIntake = (db.waterIntake || 0) + 1;
-  saveDb();
+function setupWater() {
+  const plusBtn = document.getElementById('btn-water-plus');
+  const minusBtn = document.getElementById('btn-water-minus');
+
+  if (plusBtn) {
+    plusBtn.addEventListener('click', () => {
+      triggerHaptic();
+      playSound('tick');
+      db.waterIntake = (db.waterIntake || 0) + 1;
+      saveDb();
+      updateWaterUI();
+      renderAnalytics();
+    });
+  }
+
+  if (minusBtn) {
+    minusBtn.addEventListener('click', () => {
+      triggerHaptic();
+      if (db.waterIntake && db.waterIntake > 0) {
+        db.waterIntake--;
+        saveDb();
+        updateWaterUI();
+        renderAnalytics();
+      }
+    });
+  }
   updateWaterUI();
-  renderAnalytics();
-});
-
-document.getElementById('btn-water-minus').addEventListener('click', () => {
-  triggerHaptic();
-  if (db.waterIntake && db.waterIntake > 0) {
-    db.waterIntake--;
-    saveDb();
-    updateWaterUI();
-    renderAnalytics();
-  }
-});
-
-// Initial draw
-updateWaterUI();
-
-// ── CHECKLISTS & CUSTOM TASKS ──
-const habitWalk = document.getElementById('habit-walk');
-const habitMeditate = document.getElementById('habit-meditate');
-const habitScreenbed = document.getElementById('habit-screenbed');
-
-// Setup Checkbox change state triggers
-function bindHabitCheck(el, key) {
-  el.checked = db.habitsChecked[key] || false;
-  el.addEventListener('change', () => {
-    triggerHaptic();
-    db.habitsChecked[key] = el.checked;
-    saveDb();
-    renderAnalytics();
-  });
 }
 
-bindHabitCheck(habitWalk, 'walk');
-bindHabitCheck(habitMeditate, 'meditate');
-bindHabitCheck(habitScreenbed, 'screenbed');
+// ── CHECKLISTS & FOCUS TASKS ──
+function setupChecklists() {
+  const walkCheck = document.getElementById('habit-walk');
+  const meditateCheck = document.getElementById('habit-meditate');
+  const screenbedCheck = document.getElementById('habit-screenbed');
 
-// Render Custom Tasks Checklist
-const customList = document.getElementById('custom-tasks-list');
-const formAddTask = document.getElementById('form-add-task');
-const inputTaskName = document.getElementById('input-task-name');
+  const bindCheck = (el, key) => {
+    if (!el) return;
+    el.checked = db.habitsChecked[key] || false;
+    el.addEventListener('change', () => {
+      triggerHaptic();
+      db.habitsChecked[key] = el.checked;
+      saveDb();
+      renderAnalytics();
+    });
+  };
 
-formAddTask.addEventListener('submit', (e) => {
-  e.preventDefault();
-  triggerHaptic();
-  
-  const text = inputTaskName.value.trim();
-  if (!text) return;
-  
-  if (!db.customTasks) db.customTasks = [];
-  
-  // Guard max 3 items
-  if (db.customTasks.length >= 3) {
-    alert("Focus on 3 main tasks first. Less is more.");
-    return;
+  bindCheck(walkCheck, 'walk');
+  bindCheck(meditateCheck, 'meditate');
+  bindCheck(screenbedCheck, 'screenbed');
+
+  const taskForm = document.getElementById('form-add-task');
+  if (taskForm) {
+    taskForm.addEventListener('submit', (e) => {
+      e.preventDefault();
+      triggerHaptic();
+      
+      const input = document.getElementById('input-task-name');
+      const text = input ? input.value.trim() : "";
+      if (!text) return;
+      
+      if (!db.customTasks) db.customTasks = [];
+      if (db.customTasks.length >= 3) {
+        alert("Focus on 3 main tasks first. Less is more.");
+        return;
+      }
+      
+      db.customTasks.push({ text, completed: false });
+      saveDb();
+      
+      if (input) input.value = "";
+      renderCustomTasks();
+      renderAnalytics();
+    });
   }
-  
-  db.customTasks.push({
-    text: text,
-    completed: false
-  });
-  saveDb();
-  
-  inputTaskName.value = "";
   renderCustomTasks();
-  renderAnalytics();
-});
+}
 
 function renderCustomTasks() {
-  customList.innerHTML = "";
+  const container = document.getElementById('custom-tasks-list');
+  if (!container) return;
+
+  container.innerHTML = "";
   const tasks = db.customTasks || [];
   
   tasks.forEach((task, idx) => {
@@ -805,10 +877,10 @@ function renderCustomTasks() {
       <span class="checklist-text">${task.text}</span>
       <button class="btn-delete-task" data-idx="${idx}">×</button>
     `;
-    customList.appendChild(item);
+    container.appendChild(item);
   });
   
-  // Checkbox toggle event bindings
+  // Custom checklist event triggers
   document.querySelectorAll('.task-check-btn').forEach(box => {
     box.addEventListener('change', (e) => {
       triggerHaptic();
@@ -819,7 +891,6 @@ function renderCustomTasks() {
     });
   });
   
-  // Delete task event bindings
   document.querySelectorAll('.btn-delete-task').forEach(btn => {
     btn.addEventListener('click', (e) => {
       e.preventDefault();
@@ -834,179 +905,228 @@ function renderCustomTasks() {
   });
 }
 
-// Initial checklist paint
-renderCustomTasks();
-
-// ── BEDTIME SCREEN DIGITAL LOCK CURFEW ──
-const cardBedtimeWarning = document.getElementById('card-bedtime-warning');
-const overlayCurfewLock = document.getElementById('overlay-curfew-lock');
-const btnLockCurfew = document.getElementById('btn-lock-curfew');
-const btnBypassCurfew = document.getElementById('btn-bypass-curfew');
-
-let curfewBypassed = false;
-
+// ── DIGITAL BEDTIME CURFEW ──
 function checkBedtimeLock() {
-  const now = new Date();
-  const timeString = String(now.getHours()).padStart(2,'0') + ":" + String(now.getMinutes()).padStart(2,'0');
-  
   const bedtime = db.bedtime || "21:30";
-  
-  // Simple bedtime range: from bedtime until 05:00 in morning
-  const isPastBedtime = (timeString >= bedtime || timeString < "05:00");
-  
+  const [bHours, bMinutes] = bedtime.split(":").map(Number);
+  const bedtimeMinutes = bHours * 60 + bMinutes;
+
+  const now = new Date();
+  const currentMinutes = now.getHours() * 60 + now.getMinutes();
+  const morningMinutes = 5 * 60; // 5:00 AM
+
+  let isPastBedtime = false;
+  if (bedtimeMinutes > morningMinutes) {
+    isPastBedtime = (currentMinutes >= bedtimeMinutes || currentMinutes < morningMinutes);
+  } else {
+    isPastBedtime = (currentMinutes >= bedtimeMinutes && currentMinutes < morningMinutes);
+  }
+
+  const isSnoozed = Date.now() < curfewSnoozeUntil;
+
+  const warningCard = document.getElementById('card-bedtime-warning');
+  const lockOverlay = document.getElementById('overlay-curfew-lock');
+
   if (isPastBedtime) {
-    cardBedtimeWarning.classList.remove('hidden');
-    if (!curfewBypassed) {
-      overlayCurfewLock.classList.add('open');
+    if (warningCard) warningCard.classList.remove('hidden');
+    
+    // Auto lock overlay if past bedtime, and not snoozed or bypassed
+    if (!curfewBypassed && !isSnoozed) {
+      if (lockOverlay) lockOverlay.classList.add('open');
+    } else {
+      if (lockOverlay) lockOverlay.classList.remove('open');
     }
   } else {
-    cardBedtimeWarning.classList.add('hidden');
-    overlayCurfewLock.classList.remove('open');
-    curfewBypassed = false; // Reset bypass state when morning arrives
+    if (warningCard) warningCard.classList.add('hidden');
+    if (lockOverlay) lockOverlay.classList.remove('open');
+    curfewBypassed = false;
+    curozeUntil = 0;
   }
 }
 
-btnLockCurfew.addEventListener('click', () => {
-  triggerHaptic();
-  curfewBypassed = false;
-  overlayCurfewLock.classList.add('open');
-});
+function setupCurfewActions() {
+  const snoozeBtn = document.getElementById('btn-snooze-curfew');
+  const slider = document.getElementById('curfew-unlock-slider');
+  const warningLockBtn = document.getElementById('btn-lock-curfew');
 
-btnBypassCurfew.addEventListener('click', () => {
-  triggerHaptic();
-  curfewBypassed = true;
-  overlayCurfewLock.classList.remove('open');
-});
-
-// ── SETTINGS VIEW LOADER ──
-const themeButtons = document.querySelectorAll('.select-theme-btn');
-const settingWaterTarget = document.getElementById('setting-water-target');
-const settingBedtime = document.getElementById('setting-bedtime');
-const settingHaptics = document.getElementById('setting-haptics');
-const settingSound = document.getElementById('setting-sound');
-
-function populateSettings() {
-  settingWaterTarget.value = db.waterTarget || 8;
-  settingBedtime.value = db.bedtime || "21:30";
-  settingHaptics.checked = db.hapticsEnabled !== false;
-  settingSound.checked = db.soundEnabled === true;
-  
-  // Mark active theme selected in settings grid
-  themeButtons.forEach(btn => {
-    btn.classList.remove('active');
-    if (btn.getAttribute('data-theme') === db.theme) {
-      btn.classList.add('active');
-    }
-  });
-
-  // Bind guide onboarding checkboxes
-  const guidePwa = document.getElementById('guide-pwa');
-  const guideDistractions = document.getElementById('guide-distractions');
-  const guideGrayscale = document.getElementById('guide-grayscale');
-  
-  if (db.guideCheckboxes) {
-    guidePwa.checked = db.guideCheckboxes.pwa || false;
-    guideDistractions.checked = db.guideCheckboxes.distractions || false;
-    guideGrayscale.checked = db.guideCheckboxes.grayscale || false;
+  if (snoozeBtn) {
+    snoozeBtn.addEventListener('click', () => {
+      triggerHaptic();
+      // Set snooze for 15 minutes
+      curfewSnoozeUntil = Date.now() + 15 * 60 * 1000;
+      const overlay = document.getElementById('overlay-curfew-lock');
+      if (overlay) overlay.classList.remove('open');
+      checkBedtimeLock();
+    });
   }
 
-  const bindGuideEvent = (el, key) => {
+  if (slider) {
+    slider.addEventListener('input', (e) => {
+      const val = parseInt(e.target.value);
+      if (val >= 98) {
+        triggerHaptic();
+        curfewBypassed = true;
+        e.target.value = 0;
+        const overlay = document.getElementById('overlay-curfew-lock');
+        if (overlay) overlay.classList.remove('open');
+        checkBedtimeLock();
+      }
+    });
+
+    slider.addEventListener('change', (e) => {
+      if (parseInt(e.target.value) < 98) {
+        e.target.value = 0;
+      }
+    });
+  }
+
+  if (warningLockBtn) {
+    warningLockBtn.addEventListener('click', () => {
+      triggerHaptic();
+      curfewBypassed = false;
+      curfewSnoozeUntil = 0;
+      checkBedtimeLock();
+    });
+  }
+}
+
+// ── SETTINGS VIEW PREFERENCES ──
+function setupSettings() {
+  const waterTargetInput = document.getElementById('setting-water-target');
+  const bedtimeInput = document.getElementById('setting-bedtime');
+  const hapticsCheck = document.getElementById('setting-haptics');
+  const soundCheck = document.getElementById('setting-sound');
+  const usernameInput = document.getElementById('setting-username');
+
+  // Load preferences values
+  if (waterTargetInput) waterTargetInput.value = db.waterTarget || 8;
+  if (bedtimeInput) bedtimeInput.value = db.bedtime || "21:30";
+  if (hapticsCheck) hapticsCheck.checked = db.hapticsEnabled !== false;
+  if (soundCheck) soundCheck.checked = db.soundEnabled === true;
+  if (usernameInput) usernameInput.value = db.username || "";
+
+  // Binders settings changes
+  if (waterTargetInput) {
+    waterTargetInput.addEventListener('change', () => {
+      db.waterTarget = parseInt(waterTargetInput.value) || 8;
+      saveDb();
+      updateWaterUI();
+      renderAnalytics();
+    });
+  }
+
+  if (bedtimeInput) {
+    bedtimeInput.addEventListener('change', () => {
+      db.bedtime = bedtimeInput.value || "21:30";
+      saveDb();
+      checkBedtimeLock();
+    });
+  }
+
+  if (hapticsCheck) {
+    hapticsCheck.addEventListener('change', () => {
+      db.hapticsEnabled = hapticsCheck.checked;
+      saveDb();
+      triggerHaptic();
+    });
+  }
+
+  if (soundCheck) {
+    soundCheck.addEventListener('change', () => {
+      db.soundEnabled = soundCheck.checked;
+      saveDb();
+      playSound('tick');
+    });
+  }
+
+  if (usernameInput) {
+    usernameInput.addEventListener('input', () => {
+      db.username = usernameInput.value;
+      saveDb();
+      updateGreeting();
+    });
+  }
+
+  // Theme selection selectors binding
+  const themeButtons = document.querySelectorAll('.select-theme-btn');
+  themeButtons.forEach(btn => {
+    const themeName = btn.getAttribute('data-theme');
+    if (themeName === db.theme) btn.classList.add('active');
+
+    btn.addEventListener('click', () => {
+      document.body.className = "";
+      document.body.classList.add(themeName);
+      
+      db.theme = themeName;
+      saveDb();
+      
+      themeButtons.forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      
+      triggerHaptic();
+      playSound('tick');
+    });
+  });
+
+  // Onboarding settings guides binders
+  const bindGuideCheck = (id, key) => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.checked = db.guideCheckboxes[key] || false;
     el.addEventListener('change', () => {
       triggerHaptic();
-      if (!db.guideCheckboxes) db.guideCheckboxes = {};
       db.guideCheckboxes[key] = el.checked;
       saveDb();
     });
   };
-  bindGuideEvent(guidePwa, 'pwa');
-  bindGuideEvent(guideDistractions, 'distractions');
-  bindGuideEvent(guideGrayscale, 'grayscale');
+
+  bindGuideCheck('guide-pwa', 'pwa');
+  bindGuideCheck('guide-distractions', 'distractions');
+  bindGuideCheck('guide-grayscale', 'grayscale');
+
+  // Hard Reset Button
+  const resetBtn = document.getElementById('btn-reset-storage');
+  if (resetBtn) {
+    resetBtn.addEventListener('click', () => {
+      if (confirm("Are you sure you want to delete all habits, logs, and statistics? This cannot be undone.")) {
+        triggerHaptic();
+        localStorage.removeItem('minPhoneData');
+        window.location.reload();
+      }
+    });
+  }
+
+  // Set active visual theme from DB directly
+  document.body.className = "";
+  document.body.classList.add(db.theme || "theme-obsidian");
 }
 
-// Bind live theme clicks
-themeButtons.forEach(btn => {
-  btn.addEventListener('click', () => {
-    const selectedTheme = btn.getAttribute('data-theme');
-    
-    // Clear themes & set new one
-    document.body.className = "";
-    document.body.classList.add(selectedTheme);
-    
-    db.theme = selectedTheme;
-    saveDb();
-    
-    themeButtons.forEach(b => b.classList.remove('active'));
-    btn.classList.add('active');
-    
-    triggerHaptic();
-    playSound('tick');
-  });
-});
-
-// Live setting binders
-settingWaterTarget.addEventListener('change', () => {
-  db.waterTarget = parseInt(settingWaterTarget.value) || 8;
-  saveDb();
-  updateWaterUI();
-});
-
-settingBedtime.addEventListener('change', () => {
-  db.bedtime = settingBedtime.value || "21:30";
-  saveDb();
-  checkBedtimeLock();
-});
-
-settingHaptics.addEventListener('change', () => {
-  db.hapticsEnabled = settingHaptics.checked;
-  saveDb();
-  triggerHaptic();
-});
-
-settingSound.addEventListener('change', () => {
-  db.soundEnabled = settingSound.checked;
-  saveDb();
-  playSound('tick');
-});
-
-// Full reset data button
-document.getElementById('btn-reset-storage').addEventListener('click', () => {
-  if (confirm("Are you sure you want to delete all habits, logs, and statistics? This cannot be undone.")) {
-    triggerHaptic();
-    localStorage.removeItem('minPhoneData');
-    window.location.reload();
-  }
-});
-
-// Load saved theme on load
-document.body.className = "";
-document.body.classList.add(db.theme || "theme-obsidian");
-
-// ── CUSTOM SVG GRAPHICS GENERATOR (ANALYTICS) ──
+// ── CUSTOM SVG DATA CHARTING (ANALYTICS) ──
 function renderAnalytics() {
-  // 1. Habit Completion Circle
   const habitPct = calculateHabitsPercent(db);
-  document.getElementById('habit-score-text').textContent = `${habitPct}%`;
+  const scoreText = document.getElementById('habit-score-text');
+  const scoreCircle = document.getElementById('habit-score-circle');
+
+  if (scoreText) scoreText.textContent = `${habitPct}%`;
   
-  // Circumference of Habit Arc = 2 * Math.PI * 32 = 201
-  const habitCirc = 201;
-  const habitOffset = habitCirc - (habitPct / 100) * habitCirc;
-  document.getElementById('habit-score-circle').style.strokeDashoffset = habitOffset;
+  if (scoreCircle) {
+    const habitCirc = 201; // 2 * PI * 32
+    const habitOffset = habitCirc - (habitPct / 100) * habitCirc;
+    scoreCircle.style.strokeDashoffset = habitOffset;
+  }
   
-  // 2. Average Session time display
   const sessionAvg = db.opens > 0 ? Math.round((db.screentime / 60000) / db.opens) : 0;
-  document.getElementById('analytics-time-avg').textContent = `${sessionAvg}m`;
+  const avgSessionEl = document.getElementById('analytics-time-avg');
+  if (avgSessionEl) avgSessionEl.textContent = `${sessionAvg}m`;
   
-  // Render Mood logs timeline
   renderMoodTimeline();
 
-  // 3. Weekly Usage Chart (SVG)
+  // Weekly detox bar charts SVG generator
   const chartBox = document.getElementById('usage-chart-box');
+  if (!chartBox) return;
   chartBox.innerHTML = "";
   
-  // Prepare historical data + today
   const dataset = [...db.history];
-  
-  // Add today to charts comparison
   dataset.push({
     day: TODAY,
     opens: db.opens,
@@ -1015,19 +1135,15 @@ function renderAnalytics() {
     habitsPercent: habitPct
   });
   
-  // Slice to keep only last 7 days
   const chartData = dataset.slice(-7);
+  let maxVal = Math.max(...chartData.map(d => d.minutes), 15);
   
-  // Find max value to scale graph height (y axis bounds)
-  let maxVal = Math.max(...chartData.map(d => d.minutes), 15); // min 15 minutes bounding limit
-  
-  // Build SVG string
   let svgContent = `
     <svg class="chart-svg" viewBox="0 0 320 120">
       <!-- Grid Lines -->
-      <line x1="20" y1="20" x2="300" y2="20" stroke="#222" stroke-width="1" />
-      <line x1="20" y1="55" x2="300" y2="55" stroke="#222" stroke-width="1" />
-      <line x1="20" y1="90" x2="300" y2="90" stroke="#22" stroke-width="1" />
+      <line x1="20" y1="20" x2="300" y2="20" stroke="var(--border)" stroke-width="1" />
+      <line x1="20" y1="55" x2="300" y2="55" stroke="var(--border)" stroke-width="1" />
+      <line x1="20" y1="90" x2="300" y2="90" stroke="var(--border)" stroke-width="1" />
   `;
   
   const barWidth = 24;
@@ -1036,27 +1152,22 @@ function renderAnalytics() {
   
   chartData.forEach((dayData, index) => {
     const x = startX + index * (barWidth + spacing);
-    
-    // Scale height (max y = 80px range, mapping 0 -> 90px on chart coordinate grid)
-    const barHeight = Math.max((dayData.minutes / maxVal) * 70, 4); // min height 4px to see it
+    const barHeight = Math.max((dayData.minutes / maxVal) * 70, 4);
     const y = 90 - barHeight;
     
-    // Check if drawing today bar (highlight style)
     const isToday = dayData.day === TODAY;
     const barClass = isToday ? 'chart-bar highlight' : 'chart-bar';
-    
-    // Get simple day code: e.g. "Mon"
     const dayLabel = dayData.day.split(" ")[0];
     
     svgContent += `
       <!-- Bar -->
-      <rect x="${x}" y="${y}" width="${barWidth}" height="${barHeight}" class="${barClass}" />
+      <rect x="${x}" y="${y}" width="${barWidth}" height="${barHeight}" class="${barClass}" rx="3" />
       
       <!-- Label minutes -->
       <text x="${x + barWidth/2}" y="${y - 4}" class="chart-val-text">${dayData.minutes}m</text>
       
       <!-- Label Day -->
-      <text x="${x + barWidth/2}" y="106}" class="chart-text">${dayLabel}</text>
+      <text x="${x + barWidth/2}" y="106" class="chart-text">${dayLabel}</text>
     `;
   });
   
@@ -1064,9 +1175,63 @@ function renderAnalytics() {
   chartBox.innerHTML = svgContent;
 }
 
-// Initial analytics paint safely
-try {
-  renderAnalytics();
-} catch (e) {
-  console.error("Analytics rendering error on load:", e);
+// ── ROOT SYSTEM INITIALIZATION ──
+function init() {
+  loadDatabase();
+  initializeDatabase();
+  initBatteryAPI();
+  
+  // Set up elements
+  setupQuotes();
+  setupDialer();
+  setupWhatsApp();
+  setupFeelings();
+  setupTimerBindings();
+  setupWater();
+  setupChecklists();
+  setupCurfewActions();
+  setupSettings();
+  
+  // Modals overlays mapping
+  registerModal('btn-dialer-trigger', 'overlay-dialer', 'btn-dialer-close', renderContacts);
+  registerModal('btn-whatsapp-trigger', 'overlay-whatsapp', 'btn-whatsapp-close');
+  
+  // Set tab buttons binders
+  const homeTab = document.getElementById('tab-btn-home');
+  const myDayTab = document.getElementById('tab-btn-myday');
+  const statsTab = document.getElementById('tab-btn-stats');
+
+  if (homeTab) homeTab.addEventListener('click', () => navigateTo(0));
+  if (myDayTab) myDayTab.addEventListener('click', () => navigateTo(1));
+  if (statsTab) statsTab.addEventListener('click', () => navigateTo(2));
+
+  // Bind sliding gesture touch handlers
+  const viewport = document.querySelector('.viewport');
+  if (viewport) {
+    viewport.addEventListener('touchstart', e => {
+      touchStartX = e.changedTouches[0].screenX;
+      touchStartY = e.changedTouches[0].screenY;
+    }, { passive: true });
+    
+    viewport.addEventListener('touchend', e => {
+      touchEndX = e.changedTouches[0].screenX;
+      touchEndY = e.changedTouches[0].screenY;
+      handleSwipeGesture();
+    }, { passive: true });
+  }
+
+  // Draw initial clocks and launch update loops
+  updateClocks();
+  setInterval(updateClocks, 1000);
+
+  // Initial draw greeting and statistics
+  updateGreeting();
+  try {
+    renderAnalytics();
+  } catch (e) {
+    console.error("Analytics chart render failure:", e);
+  }
 }
+
+// Kick off system init when DOM is loaded
+window.addEventListener('DOMContentLoaded', init);
